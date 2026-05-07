@@ -1,5 +1,5 @@
 // API Base URL
-const API_BASE = 'http://localhost:8001/api';
+const API_BASE = '/api';
 
 // Global variables
 let currentSection = 'dashboard';
@@ -28,7 +28,7 @@ function setupEventListeners() {
 }
 
 // Navigation
-function showSection(sectionName) {
+function showSection(sectionName, linkElement) {
     // Hide all sections
     document.querySelectorAll('.section').forEach(section => {
         section.classList.add('d-none');
@@ -43,7 +43,9 @@ function showSection(sectionName) {
     document.getElementById(sectionName + '-section').classList.remove('d-none');
 
     // Add active class to current nav link
-    event.target.classList.add('active');
+    if (linkElement) {
+        linkElement.classList.add('active');
+    }
 
     currentSection = sectionName;
 
@@ -67,6 +69,9 @@ function showSection(sectionName) {
         case 'invoices':
             loadInvoices();
             break;
+        case 'cash':
+            loadCashRegisters();
+            break;
         case 'stock':
             loadStockMovements();
             break;
@@ -75,8 +80,10 @@ function showSection(sectionName) {
 
 // API Helper Functions
 async function apiRequest(endpoint, options = {}) {
-    const url = `${API_BASE}${endpoint}`;
+    const url = endpoint.startsWith('/web-api') ? endpoint : `${API_BASE}${endpoint}`;
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
     const config = {
+        credentials: 'same-origin',
         headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
@@ -84,6 +91,11 @@ async function apiRequest(endpoint, options = {}) {
         },
         ...options
     };
+
+    const method = (options.method || 'GET').toUpperCase();
+    if (csrfToken && !['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+        config.headers['X-CSRF-TOKEN'] = csrfToken;
+    }
 
     try {
         const response = await fetch(url, config);
@@ -591,15 +603,18 @@ async function loadInvoices() {
         tbody.innerHTML = '';
 
         invoices.forEach(invoice => {
+            const dueAmount = invoice.due_amount ?? 0;
+            const showPay = dueAmount > 0;
             const row = `
                 <tr>
                     <td>${invoice.id}</td>
                     <td>${invoice.customer_name}</td>
-                    <td>$${invoice.total || 0}</td>
+                    <td>$${parseFloat(invoice.total || 0).toFixed(2)}</td>
                     <td>${new Date(invoice.created_at).toLocaleDateString()}</td>
                     <td>${invoice.status || 'Pendiente'}</td>
                     <td>
                         <button class="btn btn-sm btn-info me-2" onclick="viewInvoice(${invoice.id})">Ver</button>
+                        ${showPay ? `<button class="btn btn-sm btn-success me-2" onclick="viewInvoice(${invoice.id}, true)">Pagar</button>` : ''}
                         <button class="btn btn-sm btn-danger" onclick="deleteInvoice(${invoice.id})">Eliminar</button>
                     </td>
                 </tr>
@@ -854,9 +869,184 @@ async function loadStockMovements() {
     }
 }
 
+// Cash Register Functions
+async function loadCashRegisters() {
+    try {
+        const data = await apiRequest('/cash-registers');
+        const cashRegisters = Array.isArray(data) ? data : data.data || [];
+
+        const tbody = document.getElementById('cash-registers-tbody');
+        const statusLabel = document.getElementById('cash-register-status');
+        tbody.innerHTML = '';
+
+        if (cashRegisters.length === 0) {
+            statusLabel.textContent = 'No hay cajas registradas.';
+        } else {
+            const openRegister = cashRegisters.find(register => register.status === 'open');
+            statusLabel.textContent = openRegister ? `Caja abierta por ${openRegister.user?.name || 'usuario'} desde ${new Date(openRegister.opened_at).toLocaleString()}` : 'No hay caja abierta.';
+        }
+
+        cashRegisters.forEach(cashRegister => {
+            const row = `
+                <tr>
+                    <td>${cashRegister.id}</td>
+                    <td>${cashRegister.user?.name || ''}</td>
+                    <td>${cashRegister.initial_amount.toFixed(2)}</td>
+                    <td>${cashRegister.closing_amount !== null ? cashRegister.closing_amount.toFixed(2) : '-'}</td>
+                    <td>${cashRegister.status}</td>
+                    <td>${cashRegister.opened_at ? new Date(cashRegister.opened_at).toLocaleString() : ''}</td>
+                    <td>${cashRegister.closed_at ? new Date(cashRegister.closed_at).toLocaleString() : ''}</td>
+                    <td>
+                        ${cashRegister.status === 'open' ? `<button class="btn btn-sm btn-warning" onclick="showCloseCashRegisterModal(${cashRegister.id})">Cerrar</button>` : ''}
+                    </td>
+                </tr>
+            `;
+            tbody.innerHTML += row;
+        });
+    } catch (error) {
+        console.error('Error loading cash registers:', error);
+    }
+}
+
+function showCashRegisterModal() {
+    document.getElementById('cashRegisterInitialAmount').value = '';
+    document.getElementById('cashRegisterOpenNote').value = '';
+    document.getElementById('cashRegisterModalTitle').textContent = 'Abrir Caja';
+    document.getElementById('cashRegisterSaveButton').onclick = saveCashRegister;
+    const modal = new bootstrap.Modal(document.getElementById('cashRegisterModal'));
+    modal.show();
+}
+
+function showCloseCashRegisterModal(id) {
+    document.getElementById('closeCashRegisterId').value = id;
+    document.getElementById('cashRegisterCloseAmount').value = '';
+    document.getElementById('cashRegisterCloseNote').value = '';
+    const modal = new bootstrap.Modal(document.getElementById('cashRegisterCloseModal'));
+    modal.show();
+}
+
+async function saveCashRegister() {
+    const initialAmount = parseFloat(document.getElementById('cashRegisterInitialAmount').value) || 0;
+    const openNote = document.getElementById('cashRegisterOpenNote').value;
+
+    try {
+        await apiRequest('/web-api/cash-registers', {
+            method: 'POST',
+            body: JSON.stringify({
+                initial_amount: initialAmount,
+                open_note: openNote,
+            }),
+        });
+
+        bootstrap.Modal.getInstance(document.getElementById('cashRegisterModal')).hide();
+        loadCashRegisters();
+    } catch (error) {
+        // Error handled in apiRequest
+    }
+}
+
+async function closeCashRegister() {
+    const cashRegisterId = document.getElementById('closeCashRegisterId').value;
+    const closingAmount = parseFloat(document.getElementById('cashRegisterCloseAmount').value) || 0;
+    const closeNote = document.getElementById('cashRegisterCloseNote').value;
+
+    try {
+        await apiRequest(`/web-api/cash-registers/${cashRegisterId}`, {
+            method: 'PUT',
+            body: JSON.stringify({
+                closing_amount: closingAmount,
+                close_note: closeNote,
+            }),
+        });
+
+        bootstrap.Modal.getInstance(document.getElementById('cashRegisterCloseModal')).hide();
+        loadCashRegisters();
+    } catch (error) {
+        // Error handled in apiRequest
+    }
+}
+
 // Utility functions for edit operations
 function editCategory(id) { showCategoryModal(id); }
 function editSupplier(id) { showSupplierModal(id); }
 function editProduct(id) { showProductModal(id); }
 function editCustomer(id) { showCustomerModal(id); }
-function viewInvoice(id) { /* TODO: Implement view invoice details */ }
+
+async function viewInvoice(id, openPay = false) {
+    try {
+        const invoice = await apiRequest(`/invoices/${id}`);
+        if (!invoice) {
+            alert('No se encontró la factura');
+            return;
+        }
+
+        document.getElementById('invoiceDetailsId').textContent = invoice.id;
+        document.getElementById('invoiceDetailsCustomer').textContent = invoice.customer_name || invoice.customer?.name || '';
+        document.getElementById('invoiceDetailsStatus').textContent = invoice.status || 'Pendiente';
+        document.getElementById('invoiceDetailsTotal').textContent = `$${parseFloat(invoice.total || 0).toFixed(2)}`;
+        document.getElementById('invoiceDetailsPaid').textContent = `$${parseFloat(invoice.paid_amount || 0).toFixed(2)}`;
+        document.getElementById('invoiceDetailsDue').textContent = `$${parseFloat(invoice.due_amount || 0).toFixed(2)}`;
+
+        const itemsBody = document.getElementById('invoiceDetailsItemsBody');
+        itemsBody.innerHTML = '';
+        invoice.items.forEach(item => {
+            itemsBody.innerHTML += `
+                <tr>
+                    <td>${item.product?.name || ''}</td>
+                    <td>${item.quantity}</td>
+                    <td>$${parseFloat(item.unit_price).toFixed(2)}</td>
+                    <td>$${parseFloat(item.amount).toFixed(2)}</td>
+                </tr>
+            `;
+        });
+
+        const payPanel = document.getElementById('invoicePaymentPanel');
+        const dueAmount = parseFloat(invoice.due_amount || 0);
+        payPanel.style.display = dueAmount > 0 ? 'block' : 'none';
+        document.getElementById('paymentInvoiceId').value = invoice.id;
+        document.getElementById('paymentAmount').value = dueAmount.toFixed(2);
+        document.getElementById('paymentMethod').value = '';
+        document.getElementById('paymentReference').value = '';
+
+        const modal = new bootstrap.Modal(document.getElementById('invoiceDetailsModal'));
+        modal.show();
+
+        if (openPay && dueAmount > 0) {
+            document.getElementById('paymentAmount').focus();
+        }
+    } catch (error) {
+        // Error handled in apiRequest
+    }
+}
+
+async function saveInvoicePayment() {
+    const invoiceId = parseInt(document.getElementById('paymentInvoiceId').value);
+    const amount = parseFloat(document.getElementById('paymentAmount').value) || 0;
+    const method = document.getElementById('paymentMethod').value;
+    const reference = document.getElementById('paymentReference').value;
+
+    if (amount <= 0) {
+        alert('El monto del pago debe ser mayor a cero.');
+        return;
+    }
+
+    try {
+        await apiRequest('/web-api/payments', {
+            method: 'POST',
+            body: JSON.stringify({
+                invoice_id: invoiceId,
+                payment_date: new Date().toISOString().split('T')[0],
+                amount: amount,
+                method: method,
+                reference: reference,
+            }),
+        });
+
+        bootstrap.Modal.getInstance(document.getElementById('invoiceDetailsModal')).hide();
+        loadInvoices();
+        loadDashboard();
+        alert('Pago registrado correctamente');
+    } catch (error) {
+        // Error handled in apiRequest
+    }
+}

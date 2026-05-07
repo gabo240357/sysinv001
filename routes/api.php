@@ -24,4 +24,6 @@ Route::apiResource('products', ProductController::class);
 Route::apiResource('invoices', InvoiceController::class);
 Route::apiResource('stock-movements', StockMovementController::class);
 Route::apiResource('payments', PaymentController::class);
+Route::apiResource('cash-registers', \App\Http\Controllers\CashRegisterController::class);
+Route::apiResource('cash-transactions', \App\Http\Controllers\CashTransactionController::class);
 Route::apiResource('taxes', TaxController::class);

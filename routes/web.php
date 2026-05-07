@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Controllers\CashRegisterController;
+use App\Http\Controllers\PaymentController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
@@ -38,5 +40,11 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/web', function () {
         return view('app');
+    });
+
+    Route::prefix('web-api')->group(function () {
+        Route::post('/cash-registers', [CashRegisterController::class, 'store']);
+        Route::put('/cash-registers/{cashRegister}', [CashRegisterController::class, 'update']);
+        Route::post('/payments', [PaymentController::class, 'store']);
     });
 });

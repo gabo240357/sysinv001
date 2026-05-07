@@ -9,7 +9,7 @@ class Payment extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['invoice_id', 'payment_date', 'amount', 'method', 'reference'];
+    protected $fillable = ['invoice_id', 'payment_date', 'amount', 'method', 'reference', 'user_id', 'cash_register_id'];
 
     protected $casts = [
         'payment_date' => 'date',
@@ -18,5 +18,15 @@ class Payment extends Model
     public function invoice()
     {
         return $this->belongsTo(Invoice::class);
+    }
+
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    public function cashRegister()
+    {
+        return $this->belongsTo(CashRegister::class);
     }
 }

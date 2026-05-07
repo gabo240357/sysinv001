@@ -44,6 +44,8 @@ class InvoiceController extends Controller
         $data['subtotal'] = 0;
         $data['tax_total'] = 0;
         $data['discount'] = $data['discount'] ?? 0;
+        $data['status'] = $data['status'] ?? 'due';
+        $data['user_id'] = $data['user_id'] ?? auth()->id();
 
         DB::transaction(function () use (&$data, $items, &$invoice) {
             $invoice = Invoice::create($data);

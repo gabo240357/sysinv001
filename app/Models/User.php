@@ -34,4 +34,19 @@ class User extends Authenticatable
     {
         return $this->hasMany(Invoice::class);
     }
+
+    public function payments()
+    {
+        return $this->hasMany(Payment::class);
+    }
+
+    public function cashRegisters()
+    {
+        return $this->hasMany(CashRegister::class);
+    }
+
+    public function cashTransactions()
+    {
+        return $this->hasManyThrough(CashTransaction::class, CashRegister::class, 'user_id', 'cash_register_id');
+    }
 }

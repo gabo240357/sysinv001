@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Sistema de Inventario y Facturación</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
@@ -45,25 +46,28 @@
                 <div class="d-flex flex-column p-3">
                     <h5 class="text-white mb-4">Sistema de Inventario</h5>
                     <nav class="nav nav-pills flex-column">
-                        <a class="nav-link active" href="#" onclick="showSection('dashboard')">
+                        <a class="nav-link active" href="#" onclick="showSection('dashboard', this)">
                             <i class="fas fa-tachometer-alt me-2"></i>Dashboard
                         </a>
-                        <a class="nav-link" href="#" onclick="showSection('categories')">
+                        <a class="nav-link" href="#" onclick="showSection('categories', this)">
                             <i class="fas fa-tags me-2"></i>Categorías
                         </a>
-                        <a class="nav-link" href="#" onclick="showSection('suppliers')">
+                        <a class="nav-link" href="#" onclick="showSection('suppliers', this)">
                             <i class="fas fa-truck me-2"></i>Proveedores
                         </a>
-                        <a class="nav-link" href="#" onclick="showSection('products')">
+                        <a class="nav-link" href="#" onclick="showSection('products', this)">
                             <i class="fas fa-box me-2"></i>Productos
                         </a>
-                        <a class="nav-link" href="#" onclick="showSection('customers')">
+                        <a class="nav-link" href="#" onclick="showSection('customers', this)">
                             <i class="fas fa-users me-2"></i>Clientes
                         </a>
-                        <a class="nav-link" href="#" onclick="showSection('invoices')">
+                        <a class="nav-link" href="#" onclick="showSection('invoices', this)">
                             <i class="fas fa-file-invoice me-2"></i>Facturas
                         </a>
-                        <a class="nav-link" href="#" onclick="showSection('stock')">
+                        <a class="nav-link" href="#" onclick="showSection('cash', this)">
+                            <i class="fas fa-cash-register me-2"></i>Caja
+                        </a>
+                        <a class="nav-link" href="#" onclick="showSection('stock', this)">
                             <i class="fas fa-chart-bar me-2"></i>Stock
                         </a>
                     </nav>
@@ -220,6 +224,36 @@
                                 </tr>
                             </thead>
                             <tbody id="invoices-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Cash Register Section -->
+                <div id="cash-section" class="section d-none">
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+                        <div>
+                            <h2>Caja</h2>
+                            <p id="cash-register-status" class="text-muted">Cargando estado de caja...</p>
+                        </div>
+                        <div>
+                            <button class="btn btn-success me-2" onclick="showCashRegisterModal()">Abrir Caja</button>
+                        </div>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-striped" id="cash-registers-table">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Usuario</th>
+                                    <th>Monto Inicial</th>
+                                    <th>Monto Cierre</th>
+                                    <th>Estado</th>
+                                    <th>Apertura</th>
+                                    <th>Cierre</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="cash-registers-tbody"></tbody>
                         </table>
                     </div>
                 </div>
@@ -504,8 +538,129 @@
         </div>
     </div>
 
+    <div class="modal fade" id="invoiceDetailsModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Detalle de Factura</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <p><strong>Factura:</strong> <span id="invoiceDetailsId"></span></p>
+                            <p><strong>Cliente:</strong> <span id="invoiceDetailsCustomer"></span></p>
+                        </div>
+                        <div class="col-md-6">
+                            <p><strong>Estado:</strong> <span id="invoiceDetailsStatus"></span></p>
+                            <p><strong>Total:</strong> <span id="invoiceDetailsTotal"></span></p>
+                            <p><strong>Pagado:</strong> <span id="invoiceDetailsPaid"></span></p>
+                            <p><strong>Por pagar:</strong> <span id="invoiceDetailsDue"></span></p>
+                        </div>
+                    </div>
+                    <div class="table-responsive mb-4">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Producto</th>
+                                    <th>Cantidad</th>
+                                    <th>Precio</th>
+                                    <th>Importe</th>
+                                </tr>
+                            </thead>
+                            <tbody id="invoiceDetailsItemsBody"></tbody>
+                        </table>
+                    </div>
+                    <div id="invoicePaymentPanel" style="display: none;">
+                        <h5>Registrar Pago</h5>
+                        <input type="hidden" id="paymentInvoiceId">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label for="paymentAmount" class="form-label">Monto a pagar</label>
+                                    <input type="number" step="0.01" class="form-control" id="paymentAmount" required>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label for="paymentMethod" class="form-label">Método de pago</label>
+                                    <input type="text" class="form-control" id="paymentMethod" placeholder="Efectivo, Tarjeta, Transferencia">
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label for="paymentReference" class="form-label">Referencia</label>
+                                    <input type="text" class="form-control" id="paymentReference" placeholder="Número de transacción">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                    <button type="button" class="btn btn-success" onclick="saveInvoicePayment()">Registrar Pago</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="cashRegisterModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="cashRegisterModalTitle">Abrir Caja</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="cashRegisterForm">
+                        <div class="mb-3">
+                            <label for="cashRegisterInitialAmount" class="form-label">Monto Inicial *</label>
+                            <input type="number" min="0" step="0.01" class="form-control" id="cashRegisterInitialAmount" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="cashRegisterOpenNote" class="form-label">Observaciones</label>
+                            <textarea class="form-control" id="cashRegisterOpenNote" rows="3"></textarea>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-primary" id="cashRegisterSaveButton">Abrir Caja</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="cashRegisterCloseModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Cerrar Caja</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="cashRegisterCloseForm">
+                        <input type="hidden" id="closeCashRegisterId">
+                        <div class="mb-3">
+                            <label for="cashRegisterCloseAmount" class="form-label">Monto de Cierre *</label>
+                            <input type="number" min="0" step="0.01" class="form-control" id="cashRegisterCloseAmount" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="cashRegisterCloseNote" class="form-label">Observaciones de Cierre</label>
+                            <textarea class="form-control" id="cashRegisterCloseNote" rows="3"></textarea>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-primary" onclick="closeCashRegister()">Cerrar Caja</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://kit.fontawesome.com/your-fontawesome-kit.js" crossorigin="anonymous"></script>
-    <script src="app.js"></script>
+    <script src="{{ asset('app.js') }}"></script>
 </body>
 </html>
