@@ -553,6 +553,8 @@
                         </div>
                         <div class="col-md-6">
                             <p><strong>Estado:</strong> <span id="invoiceDetailsStatus"></span></p>
+                            <p><strong>Subtotal:</strong> <span id="invoiceDetailsSubtotal"></span></p>
+                            <p><strong>Impuesto:</strong> <span id="invoiceDetailsTax"></span></p>
                             <p><strong>Total:</strong> <span id="invoiceDetailsTotal"></span></p>
                             <p><strong>Pagado:</strong> <span id="invoiceDetailsPaid"></span></p>
                             <p><strong>Por pagar:</strong> <span id="invoiceDetailsDue"></span></p>

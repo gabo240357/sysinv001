@@ -10,7 +10,7 @@ class CashRegisterController extends Controller
 {
     public function index()
     {
-        return CashRegister::with(['user', 'transactions'])->paginate(20);
+        return CashRegister::with(['user', 'transactions.invoice', 'transactions.payment'])->paginate(20);
     }
 
     public function store(Request $request)
@@ -38,7 +38,13 @@ class CashRegisterController extends Controller
             'opened_at' => now(),
         ]);
 
-        return $cashRegister->load(['user', 'transactions']);
+        $cashRegister->transactions()->create([
+            'type' => 'opening',
+            'amount' => $cashRegister->initial_amount,
+            'note' => $cashRegister->open_note,
+        ]);
+
+        return $cashRegister->load(['user', 'transactions.invoice', 'transactions.payment']);
     }
 
     public function show(CashRegister $cashRegister)
@@ -50,8 +56,8 @@ class CashRegisterController extends Controller
     {
         $user = Auth::user();
 
-        if (! $user || $cashRegister->user_id !== $user->id) {
-            return response()->json(['message' => 'No autorizado a cerrar esta caja.'], 403);
+        if (! $user) {
+            return response()->json(['message' => 'Usuario no autenticado.'], 401);
         }
 
         $data = $request->validate([
@@ -63,14 +69,24 @@ class CashRegisterController extends Controller
             return response()->json(['message' => 'La caja ya está cerrada.'], 422);
         }
 
-        $cashRegister->update([
-            'closing_amount' => $data['closing_amount'],
-            'close_note' => $data['close_note'] ?? null,
-            'status' => 'closed',
-            'closed_at' => now(),
-        ]);
+        try {
+            $cashRegister->update([
+                'closing_amount' => $data['closing_amount'],
+                'close_note' => $data['close_note'] ?? null,
+                'status' => 'closed',
+                'closed_at' => now()->toDateTimeString(),
+            ]);
 
-        return $cashRegister->load(['user', 'transactions']);
+            $cashRegister->transactions()->create([
+                'type' => 'closing',
+                'amount' => $cashRegister->closing_amount,
+                'note' => $cashRegister->close_note,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Error al cerrar la caja: ' . $e->getMessage()], 500);
+        }
+
+        return $cashRegister->load(['user', 'transactions.invoice', 'transactions.payment']);
     }
 
     public function destroy(CashRegister $cashRegister)

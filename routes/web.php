@@ -45,6 +45,7 @@ Route::middleware('auth')->group(function () {
     Route::prefix('web-api')->group(function () {
         Route::post('/cash-registers', [CashRegisterController::class, 'store']);
         Route::put('/cash-registers/{cashRegister}', [CashRegisterController::class, 'update']);
+        Route::patch('/cash-registers/{cashRegister}', [CashRegisterController::class, 'update']);
         Route::post('/payments', [PaymentController::class, 'store']);
     });
 });

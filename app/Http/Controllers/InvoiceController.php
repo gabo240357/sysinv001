@@ -56,7 +56,7 @@ class InvoiceController extends Controller
                 $unitPrice = $item['unit_price'];
                 $discount = $item['discount'] ?? 0;
                 $amount = ($quantity * $unitPrice) - $discount;
-                $taxRate = $product->tax?->percentage ?? 0;
+                $taxRate = $product->tax?->percentage ?? 16;
                 $taxAmount = round($amount * ($taxRate / 100), 2);
 
                 InvoiceItem::create([

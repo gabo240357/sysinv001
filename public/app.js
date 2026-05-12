@@ -544,7 +544,7 @@ function showCustomerModal(customerId = null) {
 
 async function saveCustomer() {
     const name = document.getElementById('customerName').value.trim();
-    const document = document.getElementById('customerDocument').value.trim();
+    const customerDocument = document.getElementById('customerDocument').value.trim();
     const email = document.getElementById('customerEmail').value.trim();
     const phone = document.getElementById('customerPhone').value.trim();
     const address = document.getElementById('customerAddress').value.trim();
@@ -556,7 +556,7 @@ async function saveCustomer() {
         return;
     }
 
-    const data = { name, document, email, phone, address };
+    const data = { name, document: customerDocument, email, phone, address };
 
     try {
         if (customerId) {
@@ -887,12 +887,18 @@ async function loadCashRegisters() {
         }
 
         cashRegisters.forEach(cashRegister => {
+            const transactions = Array.isArray(cashRegister.transactions) ? cashRegister.transactions : [];
+            const openingTx = transactions.find(tx => tx.type === 'opening');
+            const closingTx = transactions.find(tx => tx.type === 'closing');
+            const initialAmount = (openingTx?.amount || 0).toFixed(2);
+            const closingAmount = closingTx ? closingTx.amount.toFixed(2) : '-';
+
             const row = `
                 <tr>
                     <td>${cashRegister.id}</td>
                     <td>${cashRegister.user?.name || ''}</td>
-                    <td>${cashRegister.initial_amount.toFixed(2)}</td>
-                    <td>${cashRegister.closing_amount !== null ? cashRegister.closing_amount.toFixed(2) : '-'}</td>
+                    <td>${initialAmount}</td>
+                    <td>${closingAmount}</td>
                     <td>${cashRegister.status}</td>
                     <td>${cashRegister.opened_at ? new Date(cashRegister.opened_at).toLocaleString() : ''}</td>
                     <td>${cashRegister.closed_at ? new Date(cashRegister.closed_at).toLocaleString() : ''}</td>
@@ -901,7 +907,51 @@ async function loadCashRegisters() {
                     </td>
                 </tr>
             `;
-            tbody.innerHTML += row;
+            const transactionRows = transactions.length > 0 ? transactions.map(tx => {
+                const paymentLabel = tx.invoice?.id ? `Factura #${tx.invoice.id}` : tx.payment?.id ? `Pago #${tx.payment.id}` : tx.type === 'opening' ? 'Apertura' : tx.type === 'closing' ? 'Cierre' : 'Otro';
+                return `
+                <tr>
+                    <td>${tx.id}</td>
+                    <td>${tx.type}</td>
+                    <td>$${parseFloat(tx.amount || 0).toFixed(2)}</td>
+                    <td>${paymentLabel}</td>
+                    <td>${tx.reference || ''}</td>
+                    <td>${tx.payment?.method || tx.method || ''}</td>
+                    <td>${tx.created_at ? new Date(tx.created_at).toLocaleString() : ''}</td>
+                </tr>
+            `;
+            }).join('') : `
+                <tr>
+                    <td colspan="7" class="text-center text-muted">No hay movimientos en esta caja.</td>
+                </tr>
+            `;
+
+            const transactionsRow = `
+                <tr class="table-secondary">
+                    <td colspan="8" class="p-0">
+                        <div class="table-responsive">
+                            <table class="table table-sm mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Tipo</th>
+                                        <th>Monto</th>
+                                        <th>Factura / Pago</th>
+                                        <th>Referencia</th>
+                                        <th>Tipo de pago</th>
+                                        <th>Fecha</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${transactionRows}
+                                </tbody>
+                            </table>
+                        </div>
+                    </td>
+                </tr>
+            `;
+
+            tbody.innerHTML += row + transactionsRow;
         });
     } catch (error) {
         console.error('Error loading cash registers:', error);
@@ -952,7 +1002,7 @@ async function closeCashRegister() {
 
     try {
         await apiRequest(`/web-api/cash-registers/${cashRegisterId}`, {
-            method: 'PUT',
+            method: 'PATCH',
             body: JSON.stringify({
                 closing_amount: closingAmount,
                 close_note: closeNote,
@@ -983,6 +1033,8 @@ async function viewInvoice(id, openPay = false) {
         document.getElementById('invoiceDetailsId').textContent = invoice.id;
         document.getElementById('invoiceDetailsCustomer').textContent = invoice.customer_name || invoice.customer?.name || '';
         document.getElementById('invoiceDetailsStatus').textContent = invoice.status || 'Pendiente';
+        document.getElementById('invoiceDetailsSubtotal').textContent = `$${parseFloat(invoice.subtotal || 0).toFixed(2)}`;
+        document.getElementById('invoiceDetailsTax').textContent = `$${parseFloat(invoice.tax_total || 0).toFixed(2)}`;
         document.getElementById('invoiceDetailsTotal').textContent = `$${parseFloat(invoice.total || 0).toFixed(2)}`;
         document.getElementById('invoiceDetailsPaid').textContent = `$${parseFloat(invoice.paid_amount || 0).toFixed(2)}`;
         document.getElementById('invoiceDetailsDue').textContent = `$${parseFloat(invoice.due_amount || 0).toFixed(2)}`;
